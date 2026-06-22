@@ -1,0 +1,78 @@
+name: build-release
+
+# Builds the RECAUTH launcher for Windows / macOS / Linux and publishes a GitHub Release with the
+# binaries attached. Every push to main produces a permanent release tagged build<run>-<sha>; pushing
+# a semver tag (v1.2.3) produces a release named after that tag. Also runnable manually.
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write # required to create releases + upload assets
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod # matches the version pinned in go.mod
+          cache: true
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build all targets (CGO-free cross-compile)
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp "RECAUTH-启动.command" dist/
+          build() {
+            echo "building $3 ($1/$2)"
+            GOOS="$1" GOARCH="$2" CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "dist/$3" .
+          }
+          build windows amd64 recauth-launch.exe
+          build darwin  arm64 recauth-launch-mac-arm64
+          build darwin  amd64 recauth-launch-mac-x64
+          build linux   amd64 recauth-launch-linux-x64
+          ( cd dist && sha256sum * > SHA256SUMS.txt )
+          ls -la dist
+
+      - name: Compute release tag
+        id: tag
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=build${GITHUB_RUN_NUMBER}-$(echo "${GITHUB_SHA}" | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: recauth-launch ${{ steps.tag.outputs.tag }}
+          body: |
+            RECAUTH 下游启动器 — 自动构建。
+
+            **下载（按平台）**
+            - Windows：`recauth-launch.exe`
+            - macOS（Apple Silicon）：`recauth-launch-mac-arm64` + `RECAUTH-启动.command`
+            - macOS（Intel）：`recauth-launch-mac-x64` + `RECAUTH-启动.command`
+            - Linux：`recauth-launch-linux-x64`
+
+            macOS 双击 `RECAUTH-启动.command`（与对应二进制放同一目录）即可——会自动按 CPU 架构挑选、解除 Gatekeeper 隔离并启动。
+            二进制未签名：Windows 首次运行点「仍要运行」，macOS 走 `.command` 或右键→打开。
+
+            校验：见 `SHA256SUMS.txt`。
+          files: |
+            dist/recauth-launch.exe
+            dist/recauth-launch-mac-arm64
+            dist/recauth-launch-mac-x64
+            dist/recauth-launch-linux-x64
+            dist/RECAUTH-启动.command
+            dist/SHA256SUMS.txt

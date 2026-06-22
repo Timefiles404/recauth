@@ -1,0 +1,7 @@
+/dist/
+*.exe
+*.exe~
+recauth-launch
+recauth-launch-mac-arm64
+recauth-launch-mac-x64
+recauth-launch-linux-x64

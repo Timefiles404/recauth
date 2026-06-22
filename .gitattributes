@@ -1,0 +1,8 @@
+# Force LF for all text so the macOS .command / shell scripts run regardless of the committer's OS.
+* text=auto eol=lf
+
+# Built binaries (if ever committed) are binary.
+*.exe              binary
+recauth-launch-mac-arm64  binary
+recauth-launch-mac-x64    binary
+recauth-launch-linux-x64  binary
